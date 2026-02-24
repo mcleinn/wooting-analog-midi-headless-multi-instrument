@@ -18,6 +18,31 @@ This project began as a side-project and is currently at a MVP (Minimum viable p
 
 ## Getting Started
 
+## Headless (Raspberry Pi / No GUI)
+
+This repo includes an optional headless daemon that creates a single virtual ALSA MIDI output port and supports multiple Wooting devices, each pinned to its own MIDI channel.
+
+See `README-headless.md` for the full guide.
+
+Quick start:
+
+```bash
+# Build
+cargo build --release --manifest-path wooting-analog-midi-core/Cargo.toml --bin wooting-analog-midi-headless
+
+# List devices (get device_id values for config)
+./wooting-analog-midi-core/target/release/wooting-analog-midi-headless --list-devices
+
+# Run (creates ~/.config/wooting-midi/headless.json if missing)
+RUST_LOG=info ./wooting-analog-midi-core/target/release/wooting-analog-midi-headless
+```
+
+Config:
+
+- `~/.config/wooting-midi/headless.json` (`device_id` -> `channel` 0-15, optional per-device mapping)
+- Example: `contrib/headless.json`
+- systemd unit: `contrib/systemd/wooting-analog-midi-headless.service`
+
 ### Wooting Analog SDK
 
 This project uses the Wooting Analog SDK under the hood. If you're on Windows the Analog SDK is installed with your Wootility. If you don't have the Wootility, or if you use Mac or Linux please refer to the [Analog SDK installation guide.](https://github.com/WootingKb/wooting-analog-sdk#installing)
