@@ -1,0 +1,15 @@
+[Unit]
+Description=Wooting Analog MIDI (headless)
+After=network.target sound.target
+
+[Service]
+Type=simple
+User=patch
+Group=patch
+Environment=RUST_LOG=info
+ExecStart=/usr/local/bin/wooting-analog-midi-headless
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

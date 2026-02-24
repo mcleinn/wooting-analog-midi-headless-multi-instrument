@@ -77,6 +77,78 @@ impl NoteSink for MidiOutputConnection {
     }
 }
 
+/// A headless-friendly engine that turns analog key values into MIDI messages.
+///
+/// This does not interact with the Wooting SDK directly; instead, the caller
+/// provides the latest analog buffer (e.g. from `read_full_buffer_device`).
+pub struct MidiEngine {
+    keys: HashMap<HIDCodes, Key>,
+    pub amount_to_shift: i8,
+    pub note_config: NoteConfig,
+}
+
+impl MidiEngine {
+    pub fn new() -> Self {
+        Self {
+            keys: generate_note_mapping(),
+            amount_to_shift: 0,
+            note_config: Default::default(),
+        }
+    }
+
+    pub fn set_note_config(&mut self, note_config: NoteConfig) {
+        self.note_config = note_config;
+    }
+
+    pub fn update_mapping(&mut self, mapping: &HashMap<HIDCodes, Vec<(Channel, NoteID)>>) {
+        let empty_mapping = vec![];
+        for (key_id, key) in self.keys.iter_mut() {
+            if let Some(mappings) = mapping.get(&key_id) {
+                key.replace_mappings_no_midi(mappings);
+            } else {
+                key.replace_mappings_no_midi(&empty_mapping);
+            }
+        }
+    }
+
+    pub fn all_notes_off(&mut self, sink: &mut MidiOutputConnection) -> Result<()> {
+        for key in self.keys.values_mut() {
+            for note in key.notes.iter_mut() {
+                note.force_off(sink)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub fn process_analog(
+        &mut self,
+        analog_data: &HashMap<u16, f32>,
+        sink: &mut MidiOutputConnection,
+    ) -> Result<()> {
+        let modifier_pressed = (*analog_data
+            .get(&MODIFIER_KEY.to_u16().unwrap())
+            .unwrap_or(&0.0))
+            >= ACTUATION_POINT;
+
+        for (key_id, key) in self.keys.iter_mut() {
+            let code = key_id.to_u16().expect("Failed to convert HIDCode to u16");
+            let value = analog_data.get(&code).unwrap_or(&0.0);
+            key.update_value(
+                *value,
+                sink,
+                if modifier_pressed {
+                    self.amount_to_shift
+                } else {
+                    0
+                },
+                &self.note_config,
+            )?;
+        }
+
+        Ok(())
+    }
+}
+
 fn default_threshold() -> f32 {
     0.5
 }
@@ -254,6 +326,16 @@ impl Note {
 
         Ok(())
     }
+
+    fn force_off(&mut self, sink: &mut impl NoteSink) -> Result<()> {
+        if self.pressed {
+            if let Some(effective_note) = self.get_effective_note() {
+                sink.note_off(effective_note, self.velocity, self.channel)?;
+            }
+            self.pressed = false;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug)]
@@ -306,6 +388,13 @@ impl Key {
         }
 
         Ok(())
+    }
+
+    fn replace_mappings_no_midi(&mut self, mappings: &Vec<(Channel, NoteID)>) {
+        self.notes.clear();
+        for (channel, note_id) in mappings.iter() {
+            self.notes.push(Note::new(*channel, *note_id));
+        }
     }
 }
 

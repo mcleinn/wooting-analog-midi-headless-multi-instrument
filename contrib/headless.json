@@ -1,0 +1,33 @@
+{
+  "virtual_port_name": "Wooting Analog MIDI",
+  "refresh_hz": 100.0,
+  "max_items": 256,
+  "default": {
+    "shift_amount": 12,
+    "note_config": {
+      "threshold": 0.5,
+      "velocity_scale": 5.0
+    },
+    "mapping": [
+      { "key": 4, "note": 57 },
+      { "key": 26, "note": 58 },
+      { "key": 22, "note": 59 },
+      { "key": 7, "note": 60 },
+      { "key": 21, "note": 61 },
+      { "key": 9, "note": 62 },
+      { "key": 23, "note": 63 },
+      { "key": 10, "note": 64 },
+      { "key": 11, "note": 65 },
+      { "key": 24, "note": 66 }
+    ]
+  },
+  "devices": [
+    {
+      "device_id": 0,
+      "channel": 0,
+      "shift_amount": null,
+      "note_config": null,
+      "mapping": null
+    }
+  ]
+}
