@@ -38,7 +38,7 @@ const MIDI_NOTE_MIN: u8 = 21;
 pub type NoteID = u8;
 pub type Channel = u8;
 
-trait NoteSink {
+pub trait NoteSink {
     fn note_on(&mut self, note_id: NoteID, velocity: f32, channel: Channel) -> Result<()>;
     fn note_off(&mut self, note_id: NoteID, velocity: f32, channel: Channel) -> Result<()>;
     fn polyphonic_aftertouch(
@@ -111,7 +111,7 @@ impl MidiEngine {
         }
     }
 
-    pub fn all_notes_off(&mut self, sink: &mut MidiOutputConnection) -> Result<()> {
+    pub fn all_notes_off(&mut self, sink: &mut impl NoteSink) -> Result<()> {
         for key in self.keys.values_mut() {
             for note in key.notes.iter_mut() {
                 note.force_off(sink)?;
@@ -123,7 +123,7 @@ impl MidiEngine {
     pub fn process_analog(
         &mut self,
         analog_data: &HashMap<u16, f32>,
-        sink: &mut MidiOutputConnection,
+        sink: &mut impl NoteSink,
     ) -> Result<()> {
         let modifier_pressed = (*analog_data
             .get(&MODIFIER_KEY.to_u16().unwrap())

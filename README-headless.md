@@ -53,6 +53,10 @@ Default virtual port name:
 
 - `Wooting Analog MIDI`
 
+## MODEP (Patchbox)
+
+On Patchbox/MODEP with `jackd -X seq`, the daemon creates an ALSA sequencer output port typed as `HARDWARE`. This makes the bridged JACK MIDI port appear as `physical`, so it shows up in MODEP's separated MIDI device list.
+
 ## Config (Per-Device Channel)
 
 Each device can be pinned to exactly one MIDI channel (0-15). The `device_id` comes from `--list-devices`.

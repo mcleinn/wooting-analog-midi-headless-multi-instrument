@@ -1,8 +1,9 @@
+use alsa::seq::{EvNote, Event, EventType, PortCap, PortType, Seq};
+use alsa::Direction;
 use anyhow::{Context, Result};
-use midir::os::unix::VirtualOutput;
-use midir::MidiOutput;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
+use std::ffi::CString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,10 +11,76 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 use wooting_analog_midi_core::{
-    FromPrimitive, HIDCodes, MidiEngine, NoteConfig, NoteID, WootingAnalogResult, REFRESH_RATE,
+    FromPrimitive, HIDCodes, MidiEngine, NoteConfig, NoteID, NoteSink, WootingAnalogResult,
+    REFRESH_RATE,
 };
 
 use wooting_analog_wrapper as sdk;
+
+struct AlsaSeqOut {
+    seq: Seq,
+    port: i32,
+}
+
+impl AlsaSeqOut {
+    fn new(client_and_port_name: &str) -> Result<Self> {
+        let seq = Seq::open(None, Some(Direction::Playback), false)
+            .context("Failed to open ALSA sequencer")?;
+
+        let cname = CString::new(client_and_port_name)
+            .context("Invalid ALSA client name (contains NUL)")?;
+        seq.set_client_name(cname.as_c_str())
+            .context("Failed to set ALSA sequencer client name")?;
+
+        let pname =
+            CString::new(client_and_port_name).context("Invalid ALSA port name (contains NUL)")?;
+
+        // Mark this as HARDWARE so jackd -X seq exposes it as a 'physical'
+        // system:midi_capture_* port, which MODEP includes in separated mode.
+        let caps = PortCap::READ | PortCap::SUBS_READ;
+        let typ = PortType::MIDI_GENERIC | PortType::HARDWARE | PortType::APPLICATION;
+        let port = seq
+            .create_simple_port(pname.as_c_str(), caps, typ)
+            .context("Failed to create ALSA sequencer port")?;
+
+        Ok(Self { seq, port })
+    }
+
+    fn send_evnote(&mut self, t: EventType, note: u8, value: u8, channel: u8) -> Result<()> {
+        let ev = EvNote {
+            channel,
+            note,
+            velocity: value,
+            off_velocity: 0,
+            duration: 0,
+        };
+        let mut e = Event::new(t, &ev);
+        e.set_source(self.port);
+        e.set_subs();
+        e.set_direct();
+        self.seq
+            .event_output_direct(&mut e)
+            .context("Failed to output ALSA sequencer event")?;
+        Ok(())
+    }
+}
+
+impl NoteSink for AlsaSeqOut {
+    fn note_on(&mut self, note_id: NoteID, velocity: f32, channel: u8) -> Result<()> {
+        let vbyte = (f32::min(velocity, 1.0) * 127.0) as u8;
+        self.send_evnote(EventType::Noteon, note_id, vbyte, channel)
+    }
+
+    fn note_off(&mut self, note_id: NoteID, velocity: f32, channel: u8) -> Result<()> {
+        let vbyte = (f32::min(velocity, 1.0) * 127.0) as u8;
+        self.send_evnote(EventType::Noteoff, note_id, vbyte, channel)
+    }
+
+    fn polyphonic_aftertouch(&mut self, note_id: NoteID, pressure: f32, channel: u8) -> Result<()> {
+        let pbyte = (f32::min(pressure, 1.0) * 127.0) as u8;
+        self.send_evnote(EventType::Keypress, note_id, pbyte, channel)
+    }
+}
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
 struct Config {
@@ -273,12 +340,8 @@ Default config path: ~/.config/wooting-midi/headless.json"
         .0
         .context("Failed to initialise Wooting Analog SDK")?;
 
-    // Create one virtual MIDI output port
-    let midi_out =
-        MidiOutput::new(&cfg.virtual_port_name).context("Failed to create MidiOutput client")?;
-    let mut conn_out = midi_out
-        .create_virtual(&cfg.virtual_port_name)
-        .map_err(|e| anyhow::anyhow!("Failed to create virtual MIDI output port: {}", e))?;
+    // Create one ALSA sequencer output port (hardware-typed for MODEP)
+    let mut conn_out = AlsaSeqOut::new(&cfg.virtual_port_name)?;
 
     // Build config lookup
     let mut configured: HashMap<u64, DeviceConfig> = HashMap::new();

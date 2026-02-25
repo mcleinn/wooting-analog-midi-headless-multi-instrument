@@ -20,3 +20,6 @@ anyhow = "1.0"
 # For the headless daemon binary
 env_logger = "0.11"
 ctrlc = "3.4"
+
+# For ALSA sequencer output (headless, MODEP-friendly)
+alsa = "0.6"

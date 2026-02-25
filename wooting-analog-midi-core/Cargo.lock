@@ -756,6 +756,7 @@ dependencies = [
 name = "wooting-analog-midi-core"
 version = "0.1.0"
 dependencies = [
+ "alsa",
  "anyhow",
  "ctrlc",
  "env_logger",
